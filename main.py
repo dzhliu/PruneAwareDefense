@@ -240,7 +240,7 @@ if __name__ == '__main__':
 
     if using_wandb:
         wandb.login(key='dc75cefb6f2dcdb92e9435a6fe80bd396ecc7b49')
-        wandb.init(project='checkingPrune', name='pruRate0.0', entity="dzhliu")
+        wandb.init(project=args.wandb_project_name, name=args.run_name, entity="dzhliu")
     
     writer = None
     if if_tb:
