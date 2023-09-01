@@ -3,19 +3,19 @@ import copy
 import numpy as np
 from MNISTAutoencoder import *
 
-def train_benign(classification_model, agent_train_loader):
+def train_benign(benign_model, agent_train_loader):
 
     #5
     training_epoch = 1
-    classification_model.train()
-    benign_optimizer = torch.optim.SGD(classification_model.parameters(), lr=0.1, )
+    benign_model.train()
+    benign_optimizer = torch.optim.SGD(benign_model.parameters(), lr=0.1, )
     for epoch in range(training_epoch):
         temp_count = 0
         for batch_idx, (data, target) in enumerate(agent_train_loader):
             data = data.to(device = m_device)
             target = target.to(device = m_device)
             benign_optimizer.zero_grad()
-            output = classification_model(data)
+            output = benign_model(data)
 
             criterion = nn.CrossEntropyLoss()
             loss = criterion(output, target.view(-1, ))
@@ -29,28 +29,28 @@ def train_benign(classification_model, agent_train_loader):
         #test_model(classification_model, test_loader)
 
 
-def train_backdoor(classification_model, target_label, agent_train_loader, agent_no=-1):  # train bd
-    classification_model.train()
-    training_epoch = 5
+def train_backdoor(bd_model, target_label, agent_train_loader, agent_no=-1):  # train bd
+    bd_model.train()
+    training_epoch = 1
 
-    mali_optimizer = torch.optim.SGD(classification_model.parameters(), lr=0.1, )
+    bd_optimizer = torch.optim.SGD(bd_model.parameters(), lr=0.1, )
     for epoch in range(training_epoch):
         total_loss = 0
         temp_count = 0
 
         for batch_idx, (data, target) in enumerate(agent_train_loader):
-            mali_optimizer.zero_grad()
+            bd_optimizer.zero_grad()
             # 0.05 for vgg, 0.2 for resnet
-            data, target = poison_data_with_normal_trigger(data, target, target_label, poison_frac=0.2, agent_no=agent_no)
+            data, target = poison_square(data, target, target_label, poison_frac=0.2, agent_no=agent_no)
 
-            output = classification_model(data)
+            output = bd_model(data)
 
             criterion = nn.CrossEntropyLoss()
             loss = criterion(output, target.view(-1, ))
 
             loss.backward()
 
-            mali_optimizer.step()
+            bd_optimizer.step()
 
             temp_count += 1
             if temp_count % 500 == 0:
@@ -125,12 +125,12 @@ def apply_grad_mask(model, mask_grad_list):
 
 
 
-def poison_data_with_normal_trigger(data, target, target_label, poison_frac = 0.2, agent_no = -1): #square
+def poison_square(data, label, target_label, poison_frac = 0.2, agent_no = -1): #square
     data = copy.deepcopy(data)
-    target = copy.deepcopy(target)
+    label = copy.deepcopy(label)
     
     target_tensor = []
-    poison_number = math.floor(len(target) * poison_frac)
+    poison_number = math.floor(len(label) * poison_frac)
     trigger_value = 1
     pattern_type = [[[0, 0], [0, 1], [0, 2], [0, 3]],
     [[0, 6], [0, 7], [0, 8], [0, 9]],
@@ -138,7 +138,7 @@ def poison_data_with_normal_trigger(data, target, target_label, poison_frac = 0.
     [[3, 6], [3, 7], [3, 8], [3, 9]]]
     if agent_no == -1:
         for index in range(poison_number):
-                target[index] = target_label
+                label[index] = target_label
                 for channel in range(1):
                   for i in range(len(pattern_type)):
                       for j in range(len(pattern_type[i])):
@@ -146,7 +146,7 @@ def poison_data_with_normal_trigger(data, target, target_label, poison_frac = 0.
                           data[index][channel][pos[0]][pos[1]] = trigger_value
     else:
         for index in range(poison_number):
-            target[index] = target_label
+            label[index] = target_label
             for channel in range(1):
               for j in range(len(pattern_type[agent_no])):
                   pos = pattern_type[agent_no][j]
@@ -156,7 +156,7 @@ def poison_data_with_normal_trigger(data, target, target_label, poison_frac = 0.
 
     random_perm = torch.randperm(len(data))
     data = data[random_perm]
-    target = target[random_perm]
+    target = label[random_perm]
 
     return data.to(device = m_device), target.to(device = m_device)
 
@@ -167,7 +167,7 @@ def test_mali_normal_trigger(model, test_loader, target_label):#square
     correctly_labeled_samples = 0
     model.eval()
     for batch_idx, (data, target) in enumerate(test_loader):
-        data, target = poison_data_with_normal_trigger(data, target, target_label, poison_frac = 1.0)
+        data, target = poison_square(data, target, target_label, poison_frac = 1.0)
         data = data.to(m_device)
         target = target.to(m_device)
         output = model(data)
@@ -206,7 +206,7 @@ def train_mali_model_with_normal_trigger_topk_mode(classification_model, target_
         for batch_idx, (data, target) in enumerate(agent_train_loader):
             mali_optimizer.zero_grad()
             
-            data, target = poison_data_with_normal_trigger(data, target, target_label, poison_frac = 0.2, agent_no = -1)
+            data, target = poison_square(data, target, target_label, poison_frac = 0.2, agent_no = -1)
 
             output = classification_model(data)
 

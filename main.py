@@ -140,8 +140,8 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
             print('current agent: '+str(agent) + '-th')
             load_batch_norm(temp_model, 0, batch_norm_list, agent_batch_norm_list)
             if agent < num_of_malicious: # train backdoor
-                raise Exception('train bd has not been revised')
                 train_backdoor(temp_model, target_label, train_loader_list[agent])
+                params_to_masks_each_client[agent] = torch.ones(len(global_model_params_prev)).to(args.device)
             else: # train benign
                 train_benign(temp_model,train_loader_list[agent])
                 activation_of_current_client_layerwise = get_activation_from_client_for_prune(temp_model, train_loader_subset4ActivHooking[agent])
