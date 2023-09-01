@@ -8,7 +8,7 @@ def boolean_string(s):
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_of_agent', type=int, default=3,
+    parser.add_argument('--num_of_agent', type=int, default=10,
                         help="number of agents:K")
     
     parser.add_argument('--num_of_malicious', type=int, default=0,

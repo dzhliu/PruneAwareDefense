@@ -2,7 +2,7 @@
 import torchvision
 import torch
 from classifier_models.resnet_cifar import ResNet18
-from torchsummary import summary
+#from torchsummary import summary
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 import torch.nn as nn
 import torch.nn.functional as F

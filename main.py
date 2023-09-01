@@ -76,7 +76,7 @@ def get_activation_from_client_for_prune(client_model, train_loader_for_prune):
 
     return activations
 
-def prune_client(client_model, activations_layerwise, topk_rates):
+def prune_client(client_model, activations_layerwise, topk_ratio):
 
     layer_to_prune = ['conv2fc', 'fc1', 'fc2'] # by default, we set the output of conv1 to be 'conv2fc' for all modules
     params_before_revising = parameters_to_vector(client_model.parameters()) != 0 #ori
@@ -88,14 +88,15 @@ def prune_client(client_model, activations_layerwise, topk_rates):
                 w = client_model.get_submodule(name).weight
                 w_shape_original = w.shape
                 w_a = torch.abs(w*activation).view(-1)
-                val, idx = torch.topk(w_a, k=math.ceil(len(w_a)*(topk_rates)), largest=False) #here we select the weights with largest w*a, and set weights to 0 for the rest of the weights
+                val, idx = torch.topk(w_a, k=math.ceil(len(w_a)*(1-topk_ratio)), largest=True) #here we select the weights with largest w*a, and set weights to 0 for the rest of the weights
                 w = w.view(-1)
                 with torch.no_grad():
                     w[idx] = 0
                     w = w.reshape(w_shape_original)
                     layer.weight.copy_(w) # copy the pruned weights back to the layer of the client model
     params_to_mask = parameters_to_vector(client_model.parameters()) != 0  #after topk pruning
-    return ((params_before_revising & params_to_mask) | params_to_mask).int()
+    #return (NOT(params_before_revising XOR params_to_mask) | params_to_mask).int()
+    return params_to_mask.int()
 
 def prune_global(aggregation_dict, params_masks_per_client):
 
@@ -239,7 +240,7 @@ if __name__ == '__main__':
 
     if using_wandb:
         wandb.login(key='dc75cefb6f2dcdb92e9435a6fe80bd396ecc7b49')
-        wandb.init(project='checkPruning', name='pruneRate0.0', entity="dzhliu")
+        wandb.init(project='checkingPrune', name='pruRate0.0', entity="dzhliu")
     
     writer = None
     if if_tb:
