@@ -3,31 +3,7 @@ import copy
 import numpy as np
 from MNISTAutoencoder import *
 
-
-
-###################################################################
-#######below components are all about pruning aware defense########
-#this function will select neurons voted by all clients
-activation = {}
-def getActivation(name):
-    # the hook signature
-    def hook(net, input, output):
-        activation[name] = output.detach()
-    ####squeeze
-    return hook
-
 def train_benign(classification_model, agent_train_loader):
-    ######################pruning aware defense: register the hook to each layer ######################
-    # register hooks for the intended layers
-    hooks = {}
-    # store the activation value of each layer obtained by the hooks
-    activations = {}
-    # register hooks for each layer and initialize the data structure
-    for name, layer in classification_model.named_modules():
-        if isinstance(layer, nn.Linear):
-            hooks[name] = layer.register_forward_hook(getActivation(name))
-            activations[name] = None
-    ###################################################################################################
 
     #5
     training_epoch = 1
@@ -40,19 +16,7 @@ def train_benign(classification_model, agent_train_loader):
             target = target.to(device = m_device)
             benign_optimizer.zero_grad()
             output = classification_model(data)
-            ###################capture activation value after forward propagation###################
-            # capture the activation values after forward
-            for name, layer in classification_model.named_modules():
-                if isinstance(layer, nn.Linear):
-                    if activations[name] is None:
-                        activations[name] = activation[name]
-                    else:
-                        activations[name] += activation[name]
-            if not('conv2fc' in activations.keys()):
-                activations['conv2fc'] = classification_model.conv2fc
-            else:
-                activations['conv2fc'] += classification_model.conv2fc
-            ########################################################################################
+
             criterion = nn.CrossEntropyLoss()
             loss = criterion(output, target.view(-1, ))
 
@@ -63,13 +27,6 @@ def train_benign(classification_model, agent_train_loader):
         print(f'     epoch:{epoch}, loss:{loss:.2f}')
         #print('benign accuracy for benign model is')
         #test_model(classification_model, test_loader)
-    #############get the average activation of the hooked activate value of fc layers####################
-    for name in activations:
-        activations[name] = torch.sum(activations[name], dim=0)
-        activations[name] /= (len(agent_train_loader)*agent_train_loader.batch_size)
-        activations[name] /= training_epoch
-    #############get the average activation of the hooked activate value of fc layers####################
-    return activations
 
 
 def train_backdoor(classification_model, target_label, agent_train_loader, agent_no=-1):  # train bd
