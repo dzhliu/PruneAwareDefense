@@ -50,7 +50,7 @@ def args_parser():
     parser.add_argument('--wandb_project_name', type = str, default="checkingPrune",
             help="wandb project name")
     
-    parser.add_argument('--wandb_run_name', type = str, default="bd_topk0.0",
+    parser.add_argument('--wandb_run_name', type = str, default="bd_topk0.8_fewshot",
         help="wandb run name")
     
     
@@ -85,7 +85,7 @@ def args_parser():
     parser.add_argument('--poison_frac', type=float, default=0.2,
             help="poison fraction of poisoned dataset")
 
-    parser.add_argument('--topk_prune_rate', type=float, default=0.0,
+    parser.add_argument('--topk_prune_rate', type=float, default=0.8,
                         help="percentage of weights to prune")
 
     args = parser.parse_args()

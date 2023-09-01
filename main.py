@@ -114,7 +114,7 @@ def prune_global(aggregation_dict, params_masks_per_client):
         aggregation_dict[client_seq] = aggregation_dict[client_seq] * params_mask_global
     return aggregation_dict
 ###################################################################
-def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4ActivHooking, args, writer = None, topk_prune_rate=0.0 ):
+def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4ActivHooking, args, writer = None):
 
     init_sparsefed(temp_model)
     init_foolsgold(temp_model)
@@ -126,6 +126,8 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
     agent_batch_norm_list = initialize_batch_norm_list(temp_model, batch_norm_list)
 
     for epoch_num in range(total_epoch):
+        if epoch_num > 5:
+            args.topk_prune_rate = 0.0
         rnd_batch_norm_dict = {}
         print('global epoch: {}'.format(epoch_num))
         global_model_params_prev = parameters_to_vector(temp_model.parameters()).detach() #the global model parameters before updating the global model
@@ -147,7 +149,7 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
             else: # train benign
                 train_benign(temp_model,train_loader_list[agent])
                 activation_of_current_client_layerwise = get_activation_from_client_for_prune(temp_model, train_loader_subset4ActivHooking[agent])
-                params_to_masks_each_client[agent] = prune_client(temp_model, activation_of_current_client_layerwise, topk_prune_rate) #0.3 means we keep the 30%
+                params_to_masks_each_client[agent] = prune_client(temp_model, activation_of_current_client_layerwise, args.topk_prune_rate) #0.3 means we keep the 30%
             with torch.no_grad():
                 local_model_update_dict = dict()
                 for name, data in temp_model.state_dict().items():
@@ -266,5 +268,5 @@ if __name__ == '__main__':
     #temp_model = ResNet18(name='local').to(device)
     temp_model = FNet().to(device)
 
-    activation = train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4ActivHooking, args, writer, args.topk_prune_rate)
+    activation = train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4ActivHooking, args, writer)
 
