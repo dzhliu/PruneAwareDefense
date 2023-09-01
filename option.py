@@ -11,7 +11,7 @@ def args_parser():
     parser.add_argument('--num_of_agent', type=int, default=10,
                         help="number of agents:K")
     
-    parser.add_argument('--num_of_malicious', type=int, default=0,
+    parser.add_argument('--num_of_malicious', type=int, default=1,
                     help="number of corrupt agents")
     
     parser.add_argument('--attack_mode', type=str, default='base',
@@ -20,7 +20,7 @@ def args_parser():
     parser.add_argument('--total_epoch', type=int, default=100,
                 help="number of total epochs")
     
-    parser.add_argument('--possibility', type=float, default=0.25,
+    parser.add_argument('--possibility', type=float, default=1,
             help="possibility of selecting malicious agents")
     
     parser.add_argument('--target_label', type=int, default=7,
@@ -47,10 +47,10 @@ def args_parser():
     parser.add_argument('--tb_path', type = str, default = None,
                 help="path of saving tensorboard")
     
-    parser.add_argument('--wandb_project_name', type = str, default="",
+    parser.add_argument('--wandb_project_name', type = str, default="checkingPrune",
             help="wandb project name")
     
-    parser.add_argument('--wandb_run_name', type = str, default="",
+    parser.add_argument('--wandb_run_name', type = str, default="bd_topk0.0",
         help="wandb run name")
     
     
@@ -66,7 +66,7 @@ def args_parser():
     parser.add_argument('--trigger_norm', type=float, default=10,
         help="norm of trigger")
     
-    parser.add_argument('--device', type=str, default="cuda:0", #"cuda:0",
+    parser.add_argument('--device', type=str, default="cpu", #"cuda:0",
     help="device of training")
     
     parser.add_argument('--dataset', type=str, default="fashionmnist",

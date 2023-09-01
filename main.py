@@ -91,7 +91,9 @@ def prune_client(client_model, activations_layerwise, topk_ratio):
                 val, idx = torch.topk(w_a, k=math.ceil(len(w_a)*(1-topk_ratio)), largest=True) #here we select the weights with largest w*a, and set weights to 0 for the rest of the weights
                 w = w.view(-1)
                 with torch.no_grad():
-                    w[idx] = 0
+                    mask = torch.zeros_like(w)
+                    mask[idx] = 1
+                    w = w*mask
                     w = w.reshape(w_shape_original)
                     layer.weight.copy_(w) # copy the pruned weights back to the layer of the client model
     params_to_mask = parameters_to_vector(client_model.parameters()) != 0  #after topk pruning
@@ -171,13 +173,13 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
         if using_wandb:
             wandb.log({'average_clip':clip})
 
-        load_batch_norm(temp_model, 0, batch_norm_list, agent_batch_norm_list)
+        #load_batch_norm(temp_model, 0, batch_norm_list, agent_batch_norm_list)
 
         # here we vote for neurons that can be used for aggregation
         aggregation_dict = prune_global(aggregation_dict, params_to_masks_each_client)
 
         benign_list = aggregation_time(temp_model, aggregation_dict, clip = clip, agg_way = args.aggregation)
-        aggregate_batch_norm(temp_model, rnd_batch_norm_dict)
+        #aggregate_batch_norm(temp_model, rnd_batch_norm_dict)
 
         benign_accuracy = test_model(temp_model, test_loader)
         malicious_accuracy = test_mali_normal_trigger(temp_model, test_loader, target_label)
@@ -240,7 +242,7 @@ if __name__ == '__main__':
 
     if using_wandb:
         wandb.login(key='dc75cefb6f2dcdb92e9435a6fe80bd396ecc7b49')
-        wandb.init(project=args.wandb_project_name, name=args.run_name, entity="dzhliu")
+        wandb.init(project=args.wandb_project_name, name=args.wandb_run_name, entity="dzhliu")
     
     writer = None
     if if_tb:
