@@ -104,10 +104,10 @@ def prune_global(aggregation_dict, params_masks_per_client):
     num_clients = len(aggregation_dict)
     param_length = len(aggregation_dict[0])
     param_to_use_threshold = (num_clients+1)/2
-    votes = torch.zeros(param_length)
+    votes = torch.zeros(param_length).to(args.device)
     for client_seq in range(0, num_clients):
         votes += params_masks_per_client[client_seq].to(args.device)
-    params_mask_global = votes.ge(param_to_use_threshold).int().to(args.device)
+    params_mask_global = votes.ge(param_to_use_threshold).int()
     for client_seq in range(0, num_clients):
         aggregation_dict[client_seq] = aggregation_dict[client_seq] * params_mask_global
     return aggregation_dict
