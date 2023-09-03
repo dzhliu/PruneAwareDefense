@@ -38,7 +38,7 @@ def args_parser():
     parser.add_argument('--save_checkpoint_path', type = str, default = None,
                 help="path of saving checkpoint")
     
-    parser.add_argument('--if_wandb', type = boolean_string, default=True,
+    parser.add_argument('--if_wandb', type = boolean_string, default=False,
                 help="wandb or not")
     
     parser.add_argument('--if_tb', type = boolean_string, default=False,
@@ -82,10 +82,10 @@ def args_parser():
     parser.add_argument('--few_shot_stop_epoch', type = int, default=0,
                         help="few shot stop epoch(epoch to stop attack)")
     
-    parser.add_argument('--poison_frac', type=float, default=0.2,
+    parser.add_argument('--poison_frac', type=float, default=0.5,
             help="poison fraction of poisoned dataset")
 
-    parser.add_argument('--topk_prune_rate', type=float, default=0.8,
+    parser.add_argument('--topk_prune_rate', type=float, default=0.0,
                         help="percentage of weights to prune")
 
     args = parser.parse_args()

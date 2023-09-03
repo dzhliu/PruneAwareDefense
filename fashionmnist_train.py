@@ -1,6 +1,8 @@
 import torch
 import copy
 import numpy as np
+
+import main
 from MNISTAutoencoder import *
 
 def train_benign(benign_model, agent_train_loader):
@@ -42,16 +44,11 @@ def train_backdoor(bd_model, target_label, agent_train_loader, agent_no=-1):  # 
             bd_optimizer.zero_grad()
             # 0.05 for vgg, 0.2 for resnet
             data, target = poison_square(data, target, target_label, poison_frac=0.2, agent_no=agent_no)
-
             output = bd_model(data)
-
             criterion = nn.CrossEntropyLoss()
             loss = criterion(output, target.view(-1, ))
-
             loss.backward()
-
             bd_optimizer.step()
-
             temp_count += 1
             if temp_count % 500 == 0:
                 print(loss)
