@@ -230,6 +230,8 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
     for epoch_num in range(total_epoch):
         if epoch_num > 5:
             args.topk_prune_rate = 0.0
+        if epoch_num > 70:
+            args.num_of_malicious = 1
         rnd_batch_norm_dict = {}
         print('global epoch: {}'.format(epoch_num))
         global_model_params_prev = parameters_to_vector(temp_model.parameters()).detach() #the global model parameters before updating the global model
@@ -248,12 +250,12 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
             if agent < num_of_malicious: # train backdoor
                 train_backdoor(temp_model, target_label, train_loader_list[agent])
                 #check_routing_intersection(target_label,train_loader_list[agent], train_loader_subset4ActivHooking, test_loader)######
-                if(epoch_num == 100):
+                if(epoch_num == 150):
                     torch.save(temp_model, './saved_model/bd_client.pt')
                 params_to_masks_each_client[agent] = torch.ones(len(global_model_params_prev)).to(args.device)
             else: # train benign
                 train_benign(temp_model,train_loader_list[agent])
-                if (epoch_num == 100 and agent == 1):
+                if (epoch_num == 150 and agent == 1):
                     torch.save(temp_model, './saved_model/be_client.pt')
                     exit(0)
                 activation_of_current_client_layerwise = get_activation_from_client_for_prune(temp_model, train_loader_subset4ActivHooking[agent])

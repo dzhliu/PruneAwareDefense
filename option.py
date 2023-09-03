@@ -11,13 +11,13 @@ def args_parser():
     parser.add_argument('--num_of_agent', type=int, default=10,
                         help="number of agents:K")
     
-    parser.add_argument('--num_of_malicious', type=int, default=1,
+    parser.add_argument('--num_of_malicious', type=int, default=0,
                     help="number of corrupt agents")
     
     parser.add_argument('--attack_mode', type=str, default='base',
                     help="trigger_generation, base, DBA, durable")
     
-    parser.add_argument('--total_epoch', type=int, default=100,
+    parser.add_argument('--total_epoch', type=int, default=200,
                 help="number of total epochs")
     
     parser.add_argument('--possibility', type=float, default=1,
