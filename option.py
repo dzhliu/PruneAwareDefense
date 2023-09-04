@@ -11,7 +11,7 @@ def args_parser():
     parser.add_argument('--num_of_agent', type=int, default=10,
                         help="number of agents:K")
     
-    parser.add_argument('--num_of_malicious', type=int, default=0,
+    parser.add_argument('--num_of_malicious', type=int, default=1,
                     help="number of corrupt agents")
     
     parser.add_argument('--attack_mode', type=str, default='base',

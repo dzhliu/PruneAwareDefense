@@ -116,7 +116,118 @@ def prune_global(aggregation_dict, params_masks_per_client):
         aggregation_dict[client_seq] = aggregation_dict[client_seq] * params_mask_global
     return aggregation_dict
 
-def check_routing_intersection(target_label, train_loader, train_loader_subset4ActivHooking_list, valid_dataset):
+def check_routing_intersection_activation(target_label, train_loader, train_loader_subset4ActivHooking_list):
+
+    train_loader_subset4ActivHooking = train_loader_subset4ActivHooking_list[0]
+    layer_to_prune = ['conv2fc', 'fc1', 'fc2']
+
+    # load model
+    be_model = torch.load('./saved_model/be_client.pt', map_location=args.device)
+    bd_model = torch.load('./saved_model/bd_client.pt', map_location=args.device)
+
+    benign_accuracy = test_model(bd_model, test_loader)
+    malicious_accuracy = test_mali_normal_trigger(bd_model, test_loader, target_label)
+
+    ####################################
+    # activation value of bd model and be data
+    activation = {}  # for hook to use
+    activations = {}  # store the activation value of each layer obtained by the hooks
+    hooks = []
+    def getActivation(name):
+        def hook(net, input, output):
+            activation[name] = output.detach()
+        return hook
+    for name, layer in bd_model.named_modules():
+        if isinstance(layer, nn.Linear):
+            hook = layer.register_forward_hook(getActivation(name))
+            hooks.append(hook)
+            activations[name] = None
+
+    bd_model.eval()
+
+    for batch_idx, (data, label) in enumerate(train_loader_subset4ActivHooking):
+        data = data.to(device=args.device)
+        label = label.to(device=args.device)
+        output = bd_model(data)
+        for name, layer in bd_model.named_modules():
+            if isinstance(layer, nn.Linear):
+                if activations[name] is None:
+                    activations[name] = activation[name]
+                else:
+                    activations[name] += activation[name]
+            if not ('conv2fc' in activations.keys()):
+                activations['conv2fc'] = bd_model.conv2fc
+            else:
+                activations['conv2fc'] += bd_model.conv2fc
+    for name in activations:
+        activations[name] = torch.sum(activations[name], dim=0)
+        activations[name] /= train_loader_subset4ActivHooking.batch_size
+        activations[name] = torch.abs(activations[name])
+
+    for hook in hooks:
+        hook.remove()
+    activation_bdModel_beData = activations
+
+    # activation value of bd model and bd data
+    activation = {}  # for hook to use
+    activations = {}  # store the activation value of each layer obtained by the hooks
+    hooks = []
+    def getActivation(name):
+        def hook(net, input, output):
+            activation[name] = output.detach()
+
+        return hook
+
+    for name, layer in bd_model.named_modules():
+        if isinstance(layer, nn.Linear):
+            hook = layer.register_forward_hook(getActivation(name))
+            hooks.append(hook)
+            activations[name] = None
+    bd_model.eval()
+    for batch_idx, (data, target) in enumerate(train_loader_subset4ActivHooking):
+        data, target = poison_square(data, target, target_label, poison_frac=1.0, agent_no=-1)
+        output = bd_model(data)
+        for name, layer in bd_model.named_modules():
+            if isinstance(layer, nn.Linear):
+                if activations[name] is None:
+                    activations[name] = activation[name]
+                else:
+                    activations[name] += activation[name]
+            if not ('conv2fc' in activations.keys()):
+                activations['conv2fc'] = bd_model.conv2fc
+            else:
+                activations['conv2fc'] += bd_model.conv2fc
+    for name in activations:
+        activations[name] = torch.sum(activations[name], dim=0)
+        activations[name] /= train_loader_subset4ActivHooking.batch_size
+        activations[name] = torch.abs(activations[name])
+    bd_model.train()
+    # finally we remove the hook
+    for hook in hooks:
+        hook.remove()
+    activation_bdModel_bdData = activations
+
+    value1, indices_bdMbeD = torch.topk(activation_bdModel_beData['conv2fc'], k=math.ceil(len(activation_bdModel_beData['conv2fc']) * 0.01), largest=True)
+    value2, indices_bdMbdD = torch.topk(activation_bdModel_bdData['conv2fc'], k=math.ceil(len(activation_bdModel_bdData['conv2fc']) * 0.01), largest=True)
+
+
+    # draw distribution
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    from scipy import stats
+
+    sns.distplot(activation_bdModel_beData['conv2fc'][indices_bdMbeD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+                 fit_kws={'color': 'red', 'label': 'bd model and be data', 'linestyle': '-'})
+    sns.distplot(activation_bdModel_bdData['conv2fc'][indices_bdMbdD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+                 fit_kws={'color': 'blue', 'label': 'bd model and bd data', 'linestyle': '-'})
+
+    plt.legend()
+    plt.show()
+
+    print('done')
+
+
+def check_routing_intersection(target_label, train_loader, train_loader_subset4ActivHooking_list):
 
     train_loader_subset4ActivHooking = train_loader_subset4ActivHooking_list[0]
     layer_to_prune = ['conv2fc', 'fc1', 'fc2']
@@ -143,6 +254,8 @@ def check_routing_intersection(target_label, train_loader, train_loader_subset4A
                 w_a = torch.abs(w * activation).view(-1)
                 bdModel_beData_wa[name] = w_a
     ####################################
+    train_loader_subset4ActivHooking_copy = copy.deepcopy(train_loader_subset4ActivHooking)
+
     # activation value of bd model and bd data
     activation = {}  # for hook to use
     activations = {}  # store the activation value of each layer obtained by the hooks
@@ -158,7 +271,7 @@ def check_routing_intersection(target_label, train_loader, train_loader_subset4A
             activations[name] = None
     bd_model.eval()
     for batch_idx, (data, target) in enumerate(train_loader_subset4ActivHooking):
-        data, target = poison_square(data, target, target_label, poison_frac=1.0, agent_no=0)
+        data, target = poison_square(data, target, target_label, poison_frac=1.0, agent_no=-1)
         output = bd_model(data)
         for name, layer in bd_model.named_modules():
             if isinstance(layer, nn.Linear):
@@ -189,10 +302,10 @@ def check_routing_intersection(target_label, train_loader, train_loader_subset4A
                 w_a = torch.abs(w * activation).view(-1)
                 bdModel_bdData_wa[name] = w_a
 
-
+    train_loader_subset4ActivHooking = copy.deepcopy(train_loader_subset4ActivHooking_copy)
 
     #get be activation from the be model
-    activation_beModel_beData = get_activation_from_client_for_prune(be_model, train_loader_subset4ActivHooking_list[1])
+    activation_beModel_beData = get_activation_from_client_for_prune(be_model, train_loader_subset4ActivHooking) # train_loader_subset4ActivHooking_list[1])
     #find w*a for be model and be data
     beModel_beData_wa = {}
     for layer_seq in range(1, len(layer_to_prune)):  # we start from 1 rather than 0 because we don't prune conv2fc
@@ -206,9 +319,34 @@ def check_routing_intersection(target_label, train_loader, train_loader_subset4A
 
     print('done')
 
-    value1, indices_beMbeD = torch.topk(beModel_beData_wa['fc1'], k=math.ceil(len(beModel_beData_wa['fc1']) * 0.001), largest= True)
-    value2, indices_bdMbeD = torch.topk(bdModel_beData_wa['fc1'], k=math.ceil(len(bdModel_beData_wa['fc1']) * 0.001), largest=True)
-    value3, indices_bdMbdD = torch.topk(bdModel_bdData_wa['fc1'], k=math.ceil(len(bdModel_bdData_wa['fc1']) * 0.001), largest=True)
+    value1, indices_beMbeD = torch.topk(beModel_beData_wa['fc1'], k=math.ceil(len(beModel_beData_wa['fc1']) * 0.0001), largest=True)
+    value2, indices_bdMbeD = torch.topk(bdModel_beData_wa['fc1'], k=math.ceil(len(bdModel_beData_wa['fc1']) * 0.0001), largest=True)
+    value3, indices_bdMbdD = torch.topk(bdModel_bdData_wa['fc1'], k=math.ceil(len(bdModel_bdData_wa['fc1']) * 0.0001), largest=True)
+
+    #draw distribution
+    import seaborn as sns
+    import numpy as np
+    import pandas as pd
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    from scipy import stats
+
+    #plt.hist(beModel_beData_wa['fc1'][indices_beMbeD].detach().numpy(), color='red', alpha=0.3, label= 'be model and be data')
+    #plt.hist(bdModel_beData_wa['fc1'][indices_bdMbeD].detach().numpy(), color='blue', alpha=0.3, label='bd model and be data')
+    #plt.hist(bdModel_bdData_wa['fc1'][indices_bdMbdD].detach().numpy(), color='green', alpha=0.3, label='bd model and bd data')
+
+
+    sns.distplot(beModel_beData_wa['fc1'][indices_beMbeD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+                 fit_kws={'color': 'red', 'label': 'be model and be data', 'linestyle': '-'})
+    sns.distplot(bdModel_beData_wa['fc1'][indices_bdMbeD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+                 fit_kws={'color': 'blue', 'label': 'bd model and be data', 'linestyle': '-'})
+    sns.distplot(bdModel_bdData_wa['fc1'][indices_bdMbdD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+                 fit_kws={'color': 'green', 'label': 'bd model and bd data', 'linestyle': '-'})
+
+    plt.legend()
+    plt.show()
+
+    print('done')
 
 
     #bdModel_bdData_wa
@@ -217,6 +355,8 @@ def check_routing_intersection(target_label, train_loader, train_loader_subset4A
 
 ###################################################################
 def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4ActivHooking, args, writer = None):
+
+    global num_of_malicious
 
     init_sparsefed(temp_model)
     init_foolsgold(temp_model)
@@ -228,10 +368,11 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
     agent_batch_norm_list = initialize_batch_norm_list(temp_model, batch_norm_list)
 
     for epoch_num in range(total_epoch):
-        if epoch_num > 5:
-            args.topk_prune_rate = 0.0
-        if epoch_num > 70:
-            args.num_of_malicious = 1
+        #if epoch_num > 5:
+        #    args.topk_prune_rate = 0.0
+        #if epoch_num > 1:
+        #    num_of_malicious = 1
+        print('num of mali:'+str(num_of_malicious))
         rnd_batch_norm_dict = {}
         print('global epoch: {}'.format(epoch_num))
         global_model_params_prev = parameters_to_vector(temp_model.parameters()).detach() #the global model parameters before updating the global model
@@ -249,15 +390,16 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
             load_batch_norm(temp_model, 0, batch_norm_list, agent_batch_norm_list)
             if agent < num_of_malicious: # train backdoor
                 train_backdoor(temp_model, target_label, train_loader_list[agent])
-                #check_routing_intersection(target_label,train_loader_list[agent], train_loader_subset4ActivHooking, test_loader)######
+                #check_routing_intersection(target_label,train_loader_list[agent], train_loader_subset4ActivHooking)######
+                #check_routing_intersection_activation(target_label,train_loader_list[agent], train_loader_subset4ActivHooking)######
                 if(epoch_num == 150):
                     torch.save(temp_model, './saved_model/bd_client.pt')
                 params_to_masks_each_client[agent] = torch.ones(len(global_model_params_prev)).to(args.device)
             else: # train benign
                 train_benign(temp_model,train_loader_list[agent])
-                if (epoch_num == 150 and agent == 1):
-                    torch.save(temp_model, './saved_model/be_client.pt')
-                    exit(0)
+                #if (epoch_num == 150 and agent == 1):
+                #    torch.save(temp_model, './saved_model/be_client.pt')
+                #    exit(0)
                 activation_of_current_client_layerwise = get_activation_from_client_for_prune(temp_model, train_loader_subset4ActivHooking[agent])
                 params_to_masks_each_client[agent] = prune_client(temp_model, activation_of_current_client_layerwise, args.topk_prune_rate) #0.3 means we keep the 30%
             with torch.no_grad():
