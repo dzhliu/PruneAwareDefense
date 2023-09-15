@@ -1,172 +1,85 @@
 import os
-
 import torch
 import torch.nn as nn
+import collections
 
-__all__ = [
-    "VGG",
-    "vgg11_bn",
-    "vgg13_bn",
-    "vgg16_bn",
-    "vgg19_bn",
-]
+# This is to add VGG to the current framework
+class ClassicVGGx(nn.Module):
 
+    #definition of commonly used VGG structures
+    net_arche_cfg = {
+        'vgg11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M', 'ap', 'FC1', 'FC2', 'FC3'],
+        'vgg13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M', 'ap', 'FC1', 'FC2', 'FC3'],
+        'vgg16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M', 'ap', 'FC1', 'FC2', 'FC3'],
+        'vgg19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M', 'ap', 'FC1', 'FC2', 'FC3']
+    }
 
-class VGG(nn.Module):
-    def __init__(self, features, num_classes=10, init_weights=True):
-        super(VGG, self).__init__()
-        self.features = features
-        # CIFAR 10 (7, 7) to (1, 1)
-        # self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+    def __init__(self, arch_name, num_classes, num_input_channels):
 
-        self.classifier = nn.Sequential(
-            nn.Linear(512 * 1 * 1, 4096),
-            # nn.Linear(512 * 7 * 7, 4096),
-            nn.ReLU(True),
-            nn.Dropout(),
-            nn.Linear(4096, 4096),
-            nn.ReLU(True),
-            nn.Dropout(),
-            nn.Linear(4096, num_classes),
-        )
-        if init_weights:
-            self._initialize_weights()
+        super(ClassicVGGx, self).__init__()
+
+        self.num_classes = num_classes
+
+        try:
+            arch_structure_def = self.net_arche_cfg[arch_name.lower()]
+        except KeyError:
+            print(f"the specified vgg structure {arch_name} does not exist. Please define the structure in model.py before use")
+
+        feature = collections.OrderedDict() # conv layer and maxpooling layer
+        classifier = collections.OrderedDict() # fc layer and relu layer
+        #classifier['conv2fc'] = nn.Identity()
+        conv_layer_seq = 0
+        fc_layer_seq = 0
+        maxpooling_layer_seq = 0
+        relu_layer_seq = 0
+        dropout_layer_seq = 0
+        batch_norm2d_seq = 0
+        ap_layer_seq = 0
+        self.conv2fc = None
+        # the var 'num_input_channels' indicates the number of input channels of the original picture
+        # e.g., handwriting photo contains single channel picture, so num_input_channels = 1. RGB picture contains 3 channels, num_input_channels = 3
+        in_channels = num_input_channels
+
+        for elem in arch_structure_def:
+            if elem == 'M':
+                feature['M'+str(maxpooling_layer_seq)] = nn.MaxPool2d(kernel_size=2, stride=2)
+                maxpooling_layer_seq += 1
+            elif elem == "FC1":
+                classifier['FC' + str(fc_layer_seq)] = nn.Linear(512 * 7 * 7, 4096) # the minimum input image size is 32*32
+                fc_layer_seq += 1
+                classifier['ReLu'+str(relu_layer_seq)] = nn.ReLU(inplace=True)
+                relu_layer_seq += 1
+                classifier['dp'+str(dropout_layer_seq)] = nn.Dropout()
+                dropout_layer_seq += 1
+            elif elem == "FC2":
+                classifier['FC'+str(fc_layer_seq)] = nn.Linear(4096, 4096)
+                fc_layer_seq += 1
+                classifier['ReLu'+str(relu_layer_seq)] = nn.ReLU(inplace=True)
+                relu_layer_seq += 1
+                classifier['dp' + str(dropout_layer_seq)] = nn.Dropout()
+                dropout_layer_seq += 1
+            elif elem == "FC3":
+                classifier['FC'+str(fc_layer_seq)] = nn.Linear(4096, self.num_classes)
+                fc_layer_seq += 1
+            elif elem == 'ap':
+                feature['ap'+str(ap_layer_seq)] = nn.AdaptiveAvgPool2d((7,7))
+                ap_layer_seq += 1
+            else:
+                feature['conv'+str(conv_layer_seq)] = nn.Conv2d(in_channels=in_channels, out_channels=elem, kernel_size=3, padding=1)
+                conv_layer_seq += 1
+                feature['bn'+str(batch_norm2d_seq)] = nn.BatchNorm2d(elem) ################################
+                batch_norm2d_seq += 1
+                feature['ReLu'+str(relu_layer_seq)] = nn.ReLU(inplace=True)
+                relu_layer_seq += 1
+                in_channels = elem
+            self.feature = nn.Sequential(feature)
+            self.classifier = nn.Sequential(classifier)
+        return
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
+        x = self.feature(x)
+        #x = torch.flatten(x, start_dim=1)
+        x = x.view(x.size(0),-1)
+        self.conv2fc = x  # this layer just cache the feature vector for future use but does not plan a role in forward propagation in reality
         x = self.classifier(x)
         return x
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.constant_(m.bias, 0)
-
-
-def make_layers(cfg, batch_norm=False):
-    layers = []
-    in_channels = 3
-    for v in cfg:
-        if v == "M":
-            layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
-        else:
-            conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
-            if batch_norm:
-                layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
-            else:
-                layers += [conv2d, nn.ReLU(inplace=True)]
-            in_channels = v
-    return nn.Sequential(*layers)
-
-
-cfgs = {
-    "A": [64, "M", 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
-    "B": [64, 64, "M", 128, 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
-    "D": [
-        64,
-        64,
-        "M",
-        128,
-        128,
-        "M",
-        256,
-        256,
-        256,
-        "M",
-        512,
-        512,
-        512,
-        "M",
-        512,
-        512,
-        512,
-        "M",
-    ],
-    "E": [
-        64,
-        64,
-        "M",
-        128,
-        128,
-        "M",
-        256,
-        256,
-        256,
-        256,
-        "M",
-        512,
-        512,
-        512,
-        512,
-        "M",
-        512,
-        512,
-        512,
-        512,
-        "M",
-    ],
-}
-
-
-def _vgg(arch, cfg, batch_norm, pretrained, progress, device, **kwargs):
-    if pretrained:
-        kwargs["init_weights"] = False
-    model = VGG(make_layers(cfgs[cfg], batch_norm=batch_norm), **kwargs)
-    if pretrained:
-        script_dir = os.path.dirname(__file__)
-        state_dict = torch.load(
-            script_dir + "/state_dicts/" + arch + ".pt", map_location=device
-        )
-        model.load_state_dict(state_dict)
-    return model
-
-
-def vgg11_bn(pretrained=False, progress=True, device="cpu", **kwargs):
-    """VGG 11-layer model (configuration "A") with batch normalization
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg("vgg11_bn", "A", True, pretrained, progress, device, **kwargs)
-
-
-def vgg13_bn(pretrained=False, progress=True, device="cpu", **kwargs):
-    """VGG 13-layer model (configuration "B") with batch normalization
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg("vgg13_bn", "B", True, pretrained, progress, device, **kwargs)
-
-
-def vgg16_bn(pretrained=False, progress=True, device="cpu", **kwargs):
-    """VGG 16-layer model (configuration "D") with batch normalization
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg("vgg16_bn", "D", True, pretrained, progress, device, **kwargs)
-
-
-def vgg19_bn(pretrained=False, progress=True, device="cpu", **kwargs):
-    """VGG 19-layer model (configuration 'E') with batch normalization
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-        progress (bool): If True, displays a progress bar of the download to stderr
-    """
-    return _vgg("vgg19_bn", "E", True, pretrained, progress, device, **kwargs)

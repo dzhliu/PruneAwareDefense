@@ -9,12 +9,23 @@ global using_wandb
 from Aggregation import *
 from classifier_models.EMNIST_model import *
 from classifier_models.FASHION_model import *
+from classifier_models.vgg import *
 from torch.utils.tensorboard import SummaryWriter
 
 
 ###################################################################
 ###################################################################
 ###################################################################
+def get_layer_to_prune_list(model_name):
+    # getattr(getattr(temp_model,'classifier'),'FC2')
+    layer_to_prune_of_models = {
+        'vgg11': ['conv2fc', 'classifier.FC0', 'classifier.FC1', 'classifier.FC2'], # implemented in vgg.py
+        'cnn': ['conv2fc', 'fc1', 'fc2'] # implemented in FASHION_model.py
+    }
+    try:
+        return layer_to_prune_of_models[model_name.lower()]
+    except KeyError:
+        print('the layers that should be pruned doesnt exist for the specified model')
 
 
 def get_train_subsets_for_activationHooking(train_loader_list, extract_ratio):
@@ -78,11 +89,10 @@ def get_activation_from_client_for_prune(client_model, train_loader_for_prune):
 
     return activations
 
-def prune_client(client_model, activations_layerwise, topk_ratio):
+def prune_client(client_model, activations_layerwise, topk_ratio, model_name):
 
-    layer_to_prune = ['conv2fc', 'fc1', 'fc2'] # by default, we set the output of conv1 to be 'conv2fc' for all modules
-    params_before_revising = parameters_to_vector(client_model.parameters()) != 0 #ori
-    for layer_seq in range(1, len(layer_to_prune)): #we start from 1 rather than 0 because we don't prune conv2fc
+    layer_to_prune = get_layer_to_prune_list(model_name)
+    for layer_seq in range(1, len(layer_to_prune)): # we start from 1 rather than 0 because we don't prune conv2fc
         layer_name = layer_to_prune[layer_seq]
         for name, layer in client_model.named_modules():
             if(layer_name == name):
@@ -99,12 +109,10 @@ def prune_client(client_model, activations_layerwise, topk_ratio):
                     w = w.reshape(w_shape_original)
                     layer.weight.copy_(w) # copy the pruned weights back to the layer of the client model
     params_to_mask = parameters_to_vector(client_model.parameters()) != 0  #after topk pruning
-    #return (NOT(params_before_revising XOR params_to_mask) | params_to_mask).int()
     return params_to_mask.int()
 
 def prune_global(aggregation_dict, params_masks_per_client):
 
-    layer_to_prune = ['conv2fc', 'fc1', 'fc2']  # by default, we set the output of conv1 to be 'conv2fc' for all modules
     num_clients = len(aggregation_dict)
     param_length = len(aggregation_dict[0])
     param_to_use_threshold = (num_clients+1)/2
@@ -116,6 +124,8 @@ def prune_global(aggregation_dict, params_masks_per_client):
         aggregation_dict[client_seq] = aggregation_dict[client_seq] * params_mask_global
     return aggregation_dict
 
+
+# the funtcions 'check_routing_intersection_activation' and 'check_routing_intersection' is only for routing overlapping investigation and thus should not be regularly called
 def check_routing_intersection_activation(target_label, train_loader, train_loader_subset4ActivHooking_list):
 
     train_loader_subset4ActivHooking = train_loader_subset4ActivHooking_list[0]
@@ -226,7 +236,6 @@ def check_routing_intersection_activation(target_label, train_loader, train_load
 
     print('done')
 
-
 def check_routing_intersection(target_label, train_loader, train_loader_subset4ActivHooking_list):
 
     train_loader_subset4ActivHooking = train_loader_subset4ActivHooking_list[0]
@@ -319,9 +328,9 @@ def check_routing_intersection(target_label, train_loader, train_loader_subset4A
 
     print('done')
 
-    value1, indices_beMbeD = torch.topk(beModel_beData_wa['fc1'], k=math.ceil(len(beModel_beData_wa['fc1']) * 0.0001), largest=True)
-    value2, indices_bdMbeD = torch.topk(bdModel_beData_wa['fc1'], k=math.ceil(len(bdModel_beData_wa['fc1']) * 0.0001), largest=True)
-    value3, indices_bdMbdD = torch.topk(bdModel_bdData_wa['fc1'], k=math.ceil(len(bdModel_bdData_wa['fc1']) * 0.0001), largest=True)
+    value1, indices_beMbeD = torch.topk(beModel_beData_wa['fc2'], k=math.ceil(len(beModel_beData_wa['fc2']) * 0.001), largest=True)
+    value2, indices_bdMbeD = torch.topk(bdModel_beData_wa['fc2'], k=math.ceil(len(bdModel_beData_wa['fc2']) * 0.001), largest=True)
+    value3, indices_bdMbdD = torch.topk(bdModel_bdData_wa['fc2'], k=math.ceil(len(bdModel_bdData_wa['fc2']) * 0.001), largest=True)
 
     #draw distribution
     import seaborn as sns
@@ -336,11 +345,11 @@ def check_routing_intersection(target_label, train_loader, train_loader_subset4A
     #plt.hist(bdModel_bdData_wa['fc1'][indices_bdMbdD].detach().numpy(), color='green', alpha=0.3, label='bd model and bd data')
 
 
-    sns.distplot(beModel_beData_wa['fc1'][indices_beMbeD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+    sns.distplot(beModel_beData_wa['fc2'][indices_beMbeD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
                  fit_kws={'color': 'red', 'label': 'be model and be data', 'linestyle': '-'})
-    sns.distplot(bdModel_beData_wa['fc1'][indices_bdMbeD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+    sns.distplot(bdModel_beData_wa['fc2'][indices_bdMbeD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
                  fit_kws={'color': 'blue', 'label': 'bd model and be data', 'linestyle': '-'})
-    sns.distplot(bdModel_bdData_wa['fc1'][indices_bdMbdD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
+    sns.distplot(bdModel_bdData_wa['fc2'][indices_bdMbdD].detach().numpy(), hist=False, kde=False, fit=stats.norm, \
                  fit_kws={'color': 'green', 'label': 'bd model and bd data', 'linestyle': '-'})
 
     plt.legend()
@@ -401,7 +410,7 @@ def train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4Act
                 #    torch.save(temp_model, './saved_model/be_client.pt')
                 #    exit(0)
                 activation_of_current_client_layerwise = get_activation_from_client_for_prune(temp_model, train_loader_subset4ActivHooking[agent])
-                params_to_masks_each_client[agent] = prune_client(temp_model, activation_of_current_client_layerwise, args.topk_prune_rate) #0.3 means we keep the 30%
+                params_to_masks_each_client[agent] = prune_client(temp_model, activation_of_current_client_layerwise, args.topk_prune_rate, args.model) #0.3 means we keep the 30%
             with torch.no_grad():
                 local_model_update_dict = dict()
                 for name, data in temp_model.state_dict().items():
@@ -506,18 +515,20 @@ if __name__ == '__main__':
     print("args: ", end='')
     print(args)
 
-    #from cifar10_train import *
-    from fashionmnist_train import *
     #dataset loading
     train_dataset, test_dataset = load_dataset(dataset, args.dataset_path)
-
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size = 128, shuffle = False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size = 128, shuffle = True)
     n_classes = 10
     train_loader_list = split_train_data(train_dataset, num_of_agent=num_of_agent, non_iid=not iid, n_classes=n_classes)
-
     train_loader_subset4ActivHooking = get_train_subsets_for_activationHooking(train_loader_list, 0.1) #for the dataset of each client, we extract a certain percentage of data for activation hooking
 
-    #temp_model = ResNet18(name='local').to(device)
+
+    #from fashionmnist_train import *
+    #temp_model = FNet().to(device)
+
+    #from cifar10_train import *
+    from fashionmnist_train import * # since the training process is the same for all dataset, we always use the same code here
+    #temp_model = ClassicVGGx('vgg11', num_classes=10, num_input_channels=3).to(device)
     temp_model = FNet().to(device)
 
     activation = train_FL(temp_model, train_loader_list, test_loader, train_loader_subset4ActivHooking, args, writer)

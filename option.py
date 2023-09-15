@@ -8,7 +8,7 @@ def boolean_string(s):
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--num_of_agent', type=int, default=10,
+    parser.add_argument('--num_of_agent', type=int, default=10, # 3 doesn't work-->data_loader.py line251-->train_dataset_list = torch.utils.data.random_split(train_dataset, [average_num_of_agent] * num_of_agent)
                         help="number of agents:K")
     
     parser.add_argument('--num_of_malicious', type=int, default=1,
@@ -70,7 +70,7 @@ def args_parser():
     help="device of training")
     
     parser.add_argument('--dataset', type=str, default="fashionmnist",
-    help="cifar10, tiny")
+    help="cifar10, tiny, fashionmnist")
 
     parser.add_argument('--server_lr', type=float, default=1,
     help="lr of server")
@@ -85,8 +85,11 @@ def args_parser():
     parser.add_argument('--poison_frac', type=float, default=0.5,
             help="poison fraction of poisoned dataset")
 
-    parser.add_argument('--topk_prune_rate', type=float, default=0.0,
+    parser.add_argument('--topk_prune_rate', type=float, default=0.3,
                         help="percentage of weights to prune")
+
+    parser.add_argument('--model', type = str, default = 'VGG11',
+                        help = 'specify the model. (CNN, VGG11)')
 
     args = parser.parse_args()
     return args
